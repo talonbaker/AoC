@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SquareClickerPointer.ViewModels"
+        xmlns:views="using:SquareClickerPointer.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="750"
+        x:Class="SquareClickerPointer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="SquareClickerPointer"
+        SizeToContent="WidthAndHeight">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <!-- PointControlView owns its own ViewModel; no binding to MainWindowViewModel needed here -->
+    <views:PointControlView/>
+
+</Window>
