@@ -1,7 +1,9 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Media;
 using SquareClickerPointer.ViewModels;
 
 namespace SquareClickerPointer.Views;
@@ -23,6 +25,39 @@ public partial class PointControlView : UserControl
     {
         DataContext = new PointControlViewModel();
         InitializeComponent();
+        BuildCheckerPattern();
+    }
+
+    // ── Checker pattern on the canvas ─────────────────────────────────────────────
+    // Builds 41 lighter squares into PadCanvas at z=0 to create the checker effect.
+    // The canvas Background property provides the darker base colour (#242424).
+    private void BuildCheckerPattern()
+    {
+        if (this.FindControl<Canvas>("PadCanvas") is not { } canvas) return;
+
+        const int tileSize = 24;
+        const int cols     = 9;   // 9 × 24 = 216
+
+        var lightBrush = new SolidColorBrush(Color.Parse("#2C2C2C"));
+
+        for (int row = 0; row < cols; row++)
+        {
+            for (int col = 0; col < cols; col++)
+            {
+                if ((row + col) % 2 != 0) continue;
+
+                var rect = new Rectangle
+                {
+                    Width  = tileSize,
+                    Height = tileSize,
+                    Fill   = lightBrush,
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(rect, col * tileSize);
+                Canvas.SetTop(rect,  row * tileSize);
+                canvas.Children.Insert(0, rect);   // below crosshairs and dot
+            }
+        }
     }
 
     // ── Wire / unwire the ViewModel event whenever DataContext changes ────────────

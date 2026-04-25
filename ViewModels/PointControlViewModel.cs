@@ -10,7 +10,7 @@ namespace SquareClickerPointer.ViewModels;
 public partial class PointControlViewModel : ViewModelBase
 {
     // ── Canvas layout constants ───────────────────────────────────────────────────
-    public const double CanvasSize  = 260.0;
+    public const double CanvasSize  = 216.0;
     public const double DotDiameter = 16.0;
     private const double DotRadius  = DotDiameter / 2.0;
     private const double MaxValue   = 10.0;
@@ -144,9 +144,8 @@ public partial class PointControlViewModel : ViewModelBase
     }
 
     // ── Presets ───────────────────────────────────────────────────────────────────
-    public PresetPoint Preset1 { get; } = new(2.0, 8.0, "1");
-    public PresetPoint Preset2 { get; } = new(5.0, 5.0, "2");
-    public PresetPoint Preset3 { get; } = new(8.0, 2.0, "3");
+    public PresetPoint Preset1 { get; } = new(2.0, 8.0, "A");
+    public PresetPoint Preset2 { get; } = new(8.0, 2.0, "B");
 
     [RelayCommand]
     private void ApplyPreset(PresetPoint? preset)
@@ -157,6 +156,49 @@ public partial class PointControlViewModel : ViewModelBase
         X = preset.X;
         Y = preset.Y;
         _suppressLockSync = false;
+        _suppressFire = false;
+        FireDotMoved();
+    }
+
+    // ── Utility commands ──────────────────────────────────────────────────────────
+    [RelayCommand]
+    private void GoToCenter()
+    {
+        _suppressLockSync = true;
+        _suppressFire = true;
+        X = MaxValue / 2.0;
+        Y = MaxValue / 2.0;
+        _suppressLockSync = false;
+        _suppressFire = false;
+        FireDotMoved();
+    }
+
+    [RelayCommand]
+    private void GoToMax()
+    {
+        _suppressLockSync = true;
+        _suppressFire = true;
+        X = MaxValue;
+        Y = MaxValue;
+        _suppressLockSync = false;
+        _suppressFire = false;
+        FireDotMoved();
+    }
+
+    [RelayCommand]
+    private void GoToMaxX()
+    {
+        _suppressFire = true;
+        X = MaxValue;
+        _suppressFire = false;
+        FireDotMoved();
+    }
+
+    [RelayCommand]
+    private void GoToMaxY()
+    {
+        _suppressFire = true;
+        Y = MaxValue;
         _suppressFire = false;
         FireDotMoved();
     }

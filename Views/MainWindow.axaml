@@ -9,7 +9,8 @@
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="SquareClickerPointer"
-        SizeToContent="WidthAndHeight">
+        SizeToContent="WidthAndHeight"
+        Background="#1C1C1C">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
