@@ -2,14 +2,34 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="SquareClickerPointer.App"
              xmlns:local="using:SquareClickerPointer"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+             RequestedThemeVariant="Dark">
+
+    <!-- ── Shared colour palette ─────────────────────────────────────────── -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="AppBackground" Color="#1C1C1C"/>
+            <SolidColorBrush x:Key="Surface"       Color="#2E2E2E"/>
+            <SolidColorBrush x:Key="SurfaceDeep"   Color="#2A2A2A"/>
+            <SolidColorBrush x:Key="BorderSubtle"  Color="#404040"/>
+            <SolidColorBrush x:Key="BorderMedium"  Color="#505050"/>
+            <SolidColorBrush x:Key="Crosshair"     Color="#727272"/>
+            <SolidColorBrush x:Key="TextPrimary"   Color="#E0E0E0"/>
+            <SolidColorBrush x:Key="TextSecondary" Color="#A1A1A1"/>
+            <SolidColorBrush x:Key="TextMuted"     Color="#71717B"/>
+            <SolidColorBrush x:Key="Accent"        Color="#3675FF"/>
+            <SolidColorBrush x:Key="AccentLight"   Color="#51A2FF"/>
+            <SolidColorBrush x:Key="AccentDark"    Color="#155DFC"/>
+
+        </ResourceDictionary>
+    </Application.Resources>
 
     <Application.DataTemplates>
         <local:ViewLocator/>
     </Application.DataTemplates>
-  
+
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://SquareClickerPointer/Styles/ControlStyles.axaml"/>
     </Application.Styles>
+
 </Application>

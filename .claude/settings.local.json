@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -oP '\\(?<=<text|>\\)[^<]{1,60}' \"C:/repos/AoC/ForReference/2D Pad_XYSet.svg\")",
+      "Bash(grep -v '^\\\\s*$')",
+      "Bash(python3 *)",
+      "Bash(grep -v '^>$')",
+      "Bash(grep -v '^[[:space:]]*$')",
+      "Bash(dotnet build *)",
+      "Bash(dotnet run *)"
+    ]
+  }
+}
