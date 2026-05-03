@@ -6,95 +6,70 @@
 
     <!--
     ═══════════════════════════════════════════════════════════════════════════════
-     ListItemView  —  one row in the expandable list
+     ListItemView  —  one row in the expandable list, with shape and colour pickers
     ═══════════════════════════════════════════════════════════════════════════════
 
-     WHAT THIS VIEW DOES
-     ────────────────────
-     Renders a single ListItemViewModel as a horizontal row:
+     ROW LAYOUT (left → right)
+     ──────────────────────────
+       [Lock toggle]  [Name]  [Shape (clickable)]  [ID]  [Colour square (clickable)]
 
-         [Lock toggle] [Name]  [Shape icon]          [ID] [Color square]
+     PICKER PATTERN — same for both colour and shape
+     ──────────────────────────────────────────────────
+       1. The clickable element is wrapped in a ToggleButton.
+          IsChecked is bound TwoWay to IsColorPickerOpen / IsShapePickerOpen on the VM.
+          Clicking the button toggles the property → opens or closes the Popup.
 
-     WHAT THIS VIEW DOES NOT DO
-     ───────────────────────────
-     • It does not set its own DataContext.  The ItemsControl in ItemListView.axaml
-       instantiates one ListItemView per item and automatically sets its DataContext
-       to the corresponding ListItemViewModel from the FilteredItems collection.
+       2. A Popup is placed as a sibling of the ToggleButton inside a Panel.
+          Popup.IsOpen is also bound TwoWay to the same VM property.
+          When the ViewModel sets IsColorPickerOpen=false (after a swatch is selected),
+          the Popup closes automatically via the binding.
 
-     • It contains no C# logic.  Every dynamic value (lock state, name, shape,
-       color) is expressed as a data-binding.  The code-behind (ListItemView.axaml.cs)
-       is nearly empty.
+       3. IsLightDismissEnabled=True on the Popup means clicking anywhere OUTSIDE
+          the picker also closes it.  When the Popup closes this way, Popup.IsOpen
+          is set to false, which writes back through the TwoWay binding →
+          IsColorPickerOpen becomes false → ToggleButton.IsChecked becomes false.
+          Everything stays in sync through bindings alone.
 
-     X:DATATYPE
-     ───────────
-     x:DataType="vm:ListItemViewModel" tells the Avalonia compiler what type the
-     DataContext will be at runtime.  This enables COMPILED bindings — the compiler
-     checks that "IsLocked", "IsStar", "ColorBrush" etc. actually exist on
-     ListItemViewModel at BUILD time, not at runtime.  Typos in binding paths
-     become build errors instead of silent failures.
+       4. Inside the Popup, an ItemsControl renders the swatch collection.
+          Each swatch button binds Command={Binding PickCommand} which is a
+          RelayCommand pre-wired (in the constructor) to call SelectColor/SelectShape
+          with a specific value.  No CommandParameter needed.
     -->
 
-    <!-- Row container — fixed height keeps all rows the same size in the list -->
     <Border Padding="6,3" Background="Transparent">
 
         <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto"
               VerticalAlignment="Center">
 
             <!-- ── Column 0: Lock toggle ──────────────────────────────────────────
-                 ToggleButton — a button that stays in its toggled state until
-                 pressed again.  It exposes an IsChecked property.
-
                  IsChecked="{Binding IsLocked, Mode=TwoWay}":
-                   TwoWay binding means the binding flows BOTH directions:
-                     • When the VM's IsLocked changes → IsChecked updates (View ← VM).
-                     • When the user clicks the button → IsChecked flips →
-                       the binding writes back to IsLocked on the VM (View → VM).
-                   This single binding replaces what used to require an event handler
-                   and a manual property assignment.
-
-                 After the write-back, the VM's generated IsLocked setter fires
-                 OnIsLockedChanged() → publishes ItemLockToggledMessage over the bus.
-                 The View does not know about the message; it only knows about
-                 the binding.
+                   Button click → IsChecked flips → TwoWay binding writes IsLocked
+                   → OnIsLockedChanged hook fires → publishes ItemLockToggledMessage.
             -->
             <ToggleButton Grid.Column="0"
                           IsChecked="{Binding IsLocked, Mode=TwoWay}"
                           Background="Transparent"
                           BorderThickness="0"
                           Padding="2"
-                          Width="26"
-                          Height="26"
+                          Width="26" Height="26"
                           VerticalAlignment="Center"
                           ToolTip.Tip="Toggle lock">
-
-                <!-- Panel stacks both icons on top of each other; only one is
-                     visible at a time.  IsVisible="{Binding IsLocked}" and
-                     IsVisible="{Binding !IsLocked}" are compiled bool bindings —
-                     Avalonia supports the ! prefix for negation. -->
                 <Panel Width="12" Height="14">
 
-                    <!-- LOCKED icon (visible when IsLocked = true) -->
+                    <!-- LOCKED icon -->
                     <Panel IsVisible="{Binding IsLocked}">
-                        <!-- Shackle closed — both arms reach the body -->
                         <Path Data="M 3,7 L 3,4 Q 3,0.5 6,0.5 Q 9,0.5 9,4 L 9,7"
                               Stroke="{DynamicResource Accent}"
-                              StrokeThickness="1.5"
-                              StrokeLineCap="Round"
-                              Fill="Transparent"/>
-                        <!-- Padlock body rectangle -->
+                              StrokeThickness="1.5" StrokeLineCap="Round" Fill="Transparent"/>
                         <Path Data="M 1,7 L 11,7 L 11,14 L 1,14 Z"
                               Fill="{DynamicResource Accent}"/>
                     </Panel>
 
-                    <!-- UNLOCKED icon (visible when IsLocked = false) -->
+                    <!-- UNLOCKED icon -->
                     <Panel IsVisible="{Binding !IsLocked}">
-                        <!-- Shackle open — right arm lifted out of body -->
                         <Path Data="M 3,7 L 3,4 Q 3,0.5 6,0.5 Q 9,0.5 9,4 L 9,2"
                               Stroke="{DynamicResource TextMuted}"
-                              StrokeThickness="1.5"
-                              StrokeLineCap="Round"
-                              Fill="Transparent"/>
-                        <!-- Padlock body (muted color = unlocked) -->
+                              StrokeThickness="1.5" StrokeLineCap="Round" Fill="Transparent"/>
                         <Path Data="M 1,7 L 11,7 L 11,14 L 1,14 Z"
                               Fill="{DynamicResource TextMuted}"/>
                     </Panel>
@@ -102,11 +77,7 @@
                 </Panel>
             </ToggleButton>
 
-            <!-- ── Column 1: Item name ────────────────────────────────────────────
-                 Simple text label from the model.  Foreground uses TextPrimary
-                 from the app's palette (defined in App.axaml ResourceDictionary).
-                 Margin="4,0" gives a small gap between the lock and the name.
-            -->
+            <!-- ── Column 1: Item name ─────────────────────────────────────────── -->
             <TextBlock Grid.Column="1"
                        Text="{Binding Name}"
                        Foreground="{DynamicResource TextPrimary}"
@@ -115,67 +86,134 @@
                        VerticalAlignment="Center"
                        Margin="4,0"/>
 
-            <!-- ── Column 2: Shape icon (16 × 16) ────────────────────────────────
-                 A Canvas with a fixed 16×16 size.  All four shapes are defined as
-                 Path children, but at most one is visible at a time — controlled
-                 by the IsStar / IsHexagon / IsTriangle / IsSquare bool properties
-                 on the ViewModel (computed from the ShapeType enum value).
-
-                 WHY Canvas instead of Grid or StackPanel?
-                   Canvas has a fixed size regardless of its children's sizes.
-                   Invisible children in a Grid still occupy their cell — Canvas
-                   children are always at (0,0) and the Canvas itself always
-                   reports its Width/Height to the parent layout.
-
-                 WHY Path geometries instead of images or icons?
-                   Paths scale to any DPI without blurring, are pure XAML with no
-                   external file dependencies, and their Fill color can be data-bound
-                   to ColorBrush — giving each item its own unique colour.
-
-                 PATH GEOMETRY STRINGS (SVG-compatible syntax):
-                   M x,y  — Move to (x,y) without drawing
-                   L x,y  — Line to (x,y)
-                   Q cx,cy x,y — Quadratic Bezier curve
-                   Z      — Close the path (line back to M start point)
-
-                 All shapes use a 16×16 coordinate space so they fit the Canvas.
+            <!-- ── Column 2: Shape icon (clickable → opens shape picker) ──────────
+                 The shape icon is wrapped in a ToggleButton so it is keyboard-
+                 accessible and provides hover/press feedback.
+                 IsChecked ↔ IsShapePickerOpen (TwoWay) drives the Popup.
             -->
-            <Canvas Grid.Column="2"
-                    Width="16" Height="16"
-                    Margin="4,0"
-                    VerticalAlignment="Center">
+            <Panel Grid.Column="2"
+                   Margin="4,0"
+                   VerticalAlignment="Center">
 
-                <!-- STAR — 5-pointed, outer radius 7, inner radius 3 -->
-                <Path Canvas.Left="0" Canvas.Top="0"
-                      Data="M 8,1 L 9.76,5.57 L 14.66,5.84 L 10.85,8.93 L 12.11,13.66 L 8,11 L 3.89,13.66 L 5.15,8.93 L 1.34,5.84 L 6.24,5.57 Z"
-                      Fill="{Binding ColorBrush}"
-                      IsVisible="{Binding IsStar}"/>
+                <!-- Clickable shape area — ToggleButton acts as the anchor -->
+                <ToggleButton x:Name="ShapePickerAnchor"
+                              IsChecked="{Binding IsShapePickerOpen, Mode=TwoWay}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Padding="2"
+                              Width="22" Height="22"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="Change shape">
 
-                <!-- HEXAGON — pointy-top, radius 7 -->
-                <Path Canvas.Left="0" Canvas.Top="0"
-                      Data="M 8,1 L 14.06,4.5 L 14.06,11.5 L 8,15 L 1.94,11.5 L 1.94,4.5 Z"
-                      Fill="{Binding ColorBrush}"
-                      IsVisible="{Binding IsHexagon}"/>
+                    <!-- Shape canvas — same geometry as in the row, but inside the button -->
+                    <Canvas Width="16" Height="16">
+                        <Path Canvas.Left="0" Canvas.Top="0"
+                              Data="M 8,1 L 9.76,5.57 L 14.66,5.84 L 10.85,8.93 L 12.11,13.66 L 8,11 L 3.89,13.66 L 5.15,8.93 L 1.34,5.84 L 6.24,5.57 Z"
+                              Fill="{Binding ColorBrush}" IsVisible="{Binding IsStar}"/>
+                        <Path Canvas.Left="0" Canvas.Top="0"
+                              Data="M 8,1 L 14.06,4.5 L 14.06,11.5 L 8,15 L 1.94,11.5 L 1.94,4.5 Z"
+                              Fill="{Binding ColorBrush}" IsVisible="{Binding IsHexagon}"/>
+                        <Path Canvas.Left="0" Canvas.Top="0"
+                              Data="M 8,1 L 15,15 L 1,15 Z"
+                              Fill="{Binding ColorBrush}" IsVisible="{Binding IsTriangle}"/>
+                        <Path Canvas.Left="0" Canvas.Top="0"
+                              Data="M 2,2 L 14,2 L 14,14 L 2,14 Z"
+                              Fill="{Binding ColorBrush}" IsVisible="{Binding IsSquare}"/>
+                    </Canvas>
 
-                <!-- TRIANGLE — pointing up -->
-                <Path Canvas.Left="0" Canvas.Top="0"
-                      Data="M 8,1 L 15,15 L 1,15 Z"
-                      Fill="{Binding ColorBrush}"
-                      IsVisible="{Binding IsTriangle}"/>
+                </ToggleButton>
 
-                <!-- SQUARE — inset 2px from edge -->
-                <Path Canvas.Left="0" Canvas.Top="0"
-                      Data="M 2,2 L 14,2 L 14,14 L 2,14 Z"
-                      Fill="{Binding ColorBrush}"
-                      IsVisible="{Binding IsSquare}"/>
+                <!-- ── SHAPE PICKER POPUP ────────────────────────────────────────
+                     PlacementTarget ties the popup's position to the ToggleButton above.
+                     IsOpen ↔ IsShapePickerOpen (TwoWay):
+                       • Opening: user clicks ShapePickerAnchor → IsChecked flips →
+                         IsShapePickerOpen = true → this Popup opens.
+                       • Closing via selection: SelectShape() sets IsShapePickerOpen=false
+                         → Popup.IsOpen becomes false via binding.
+                       • Closing via light-dismiss: user clicks elsewhere → Popup.IsOpen
+                         becomes false → TwoWay binding writes IsShapePickerOpen=false
+                         → IsChecked becomes false.
+                -->
+                <Popup IsOpen="{Binding IsShapePickerOpen, Mode=TwoWay}"
+                       PlacementTarget="{Binding #ShapePickerAnchor}"
+                       Placement="Bottom"
+                       IsLightDismissEnabled="True">
 
-            </Canvas>
+                    <Border Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource BorderMedium}"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="6">
 
-            <!-- ── Column 3: ID number ────────────────────────────────────────────
-                 The item's unique integer identifier.  Shown as muted text between
-                 the shape icon and the status square, as described in the spec.
-                 Width="32" reserves enough room for 3-digit IDs without shifting.
-            -->
+                        <!--
+                        ── SHAPE PICKER GRID
+                        2 × 2 grid of shape tiles using a WrapPanel capped at 2 columns.
+                        Each tile shows the shape icon at 40×40 in TextPrimary colour
+                        on a SurfaceDeep background.  The item's current colour is NOT
+                        shown here — the picker selects WHICH SHAPE, not how it looks
+                        in context.  Colour is chosen separately in the colour picker.
+
+                        ItemsSource={Binding ShapePaletteItems}:
+                          DataContext here is ListItemViewModel (inherited from the
+                          ListItemView UserControl).  The Popup inherits the same
+                          DataContext from its logical parent (the Panel inside
+                          the UserControl).
+
+                        x:DataType on the DataTemplate:
+                          Tells the compiled-binding system that each DataTemplate
+                          instance's DataContext will be ShapeSwatchViewModel.
+                        -->
+                        <ItemsControl ItemsSource="{Binding ShapePaletteItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <!-- MaxWidth = 2 tiles × (56 + 6 margin) = 124px -->
+                                    <WrapPanel Orientation="Horizontal" MaxWidth="130"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ShapeSwatchViewModel">
+
+                                    <Button Command="{Binding PickCommand}"
+                                            Width="54" Height="50"
+                                            Margin="3"
+                                            Padding="8"
+                                            Background="{DynamicResource SurfaceDeep}"
+                                            BorderBrush="{DynamicResource BorderSubtle}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            ToolTip.Tip="{Binding Shape}">
+
+                                        <!-- Shape paths — same geometry as the row icon, scaled up -->
+                                        <Viewbox Width="32" Height="32" Stretch="Uniform">
+                                            <Canvas Width="16" Height="16">
+                                                <Path Canvas.Left="0" Canvas.Top="0"
+                                                      Data="M 8,1 L 9.76,5.57 L 14.66,5.84 L 10.85,8.93 L 12.11,13.66 L 8,11 L 3.89,13.66 L 5.15,8.93 L 1.34,5.84 L 6.24,5.57 Z"
+                                                      Fill="{DynamicResource TextPrimary}"
+                                                      IsVisible="{Binding IsStar}"/>
+                                                <Path Canvas.Left="0" Canvas.Top="0"
+                                                      Data="M 8,1 L 14.06,4.5 L 14.06,11.5 L 8,15 L 1.94,11.5 L 1.94,4.5 Z"
+                                                      Fill="{DynamicResource TextPrimary}"
+                                                      IsVisible="{Binding IsHexagon}"/>
+                                                <Path Canvas.Left="0" Canvas.Top="0"
+                                                      Data="M 8,1 L 15,15 L 1,15 Z"
+                                                      Fill="{DynamicResource TextPrimary}"
+                                                      IsVisible="{Binding IsTriangle}"/>
+                                                <Path Canvas.Left="0" Canvas.Top="0"
+                                                      Data="M 2,2 L 14,2 L 14,14 L 2,14 Z"
+                                                      Fill="{DynamicResource TextPrimary}"
+                                                      IsVisible="{Binding IsSquare}"/>
+                                            </Canvas>
+                                        </Viewbox>
+
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </Popup>
+            </Panel>
+
+            <!-- ── Column 3: ID number ────────────────────────────────────────────── -->
             <TextBlock Grid.Column="3"
                        Text="{Binding Id}"
                        Foreground="{DynamicResource TextMuted}"
@@ -186,17 +224,87 @@
                        VerticalAlignment="Center"
                        Margin="6,0,4,0"/>
 
-            <!-- ── Column 4: Status / color square ───────────────────────────────
-                 A solid rectangle whose Fill matches the item's ColorBrush —
-                 the same brush used to fill the shape icon in Column 2.
-                 This creates the visual link between the shape and the status
-                 indicator: both always show the same colour.
+            <!-- ── Column 4: Colour square (clickable → opens colour picker) ──────
+                 Same ToggleButton + Popup pattern as the shape picker above.
+                 The small coloured rectangle inside the button IS the visual that
+                 the user sees and clicks.  Its Fill binds to ColorBrush — when the
+                 user picks a new colour, ColorBrush updates and the square refreshes.
             -->
-            <Rectangle Grid.Column="4"
-                        Width="14" Height="14"
-                        Fill="{Binding ColorBrush}"
-                        VerticalAlignment="Center"
-                        RadiusX="2" RadiusY="2"/>
+            <Panel Grid.Column="4"
+                   VerticalAlignment="Center">
+
+                <ToggleButton x:Name="ColorPickerAnchor"
+                              IsChecked="{Binding IsColorPickerOpen, Mode=TwoWay}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Padding="1"
+                              Width="20" Height="20"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="Change colour">
+
+                    <!-- The visual colour square -->
+                    <Rectangle Width="14" Height="14"
+                               Fill="{Binding ColorBrush}"
+                               RadiusX="2" RadiusY="2"/>
+
+                </ToggleButton>
+
+                <!-- ── COLOUR PICKER POPUP ───────────────────────────────────────
+                     4 × 3 grid of colour tiles matching the design spec image.
+                     Same open/close mechanism as the shape picker above.
+                -->
+                <Popup IsOpen="{Binding IsColorPickerOpen, Mode=TwoWay}"
+                       PlacementTarget="{Binding #ColorPickerAnchor}"
+                       Placement="Bottom"
+                       IsLightDismissEnabled="True">
+
+                    <Border Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource BorderMedium}"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="6">
+
+                        <!--
+                        ── COLOUR PICKER GRID
+                        12 tiles in a 4-column WrapPanel = 3 rows.
+                        Each tile is a plain coloured button — Background={Binding Brush}
+                        with no text or icon inside.  The colour IS the content.
+
+                        Sizes chosen to match the proportions shown in the design image:
+                          Tile: 50 × 44 + 4px margin → 4 columns = 216px + 12px padding
+                        -->
+                        <ItemsControl ItemsSource="{Binding ColorPaletteItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" MaxWidth="228"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ColorSwatchViewModel">
+
+                                    <!--
+                                    Background="{Binding Brush}":
+                                      Each swatch's background IS its colour.
+                                      This is the same brush stored on ColorSwatchViewModel.
+
+                                    Command="{Binding PickCommand}":
+                                      Pre-wired RelayCommand that calls SelectColor(thisColor)
+                                      on the parent ListItemViewModel — no CommandParameter.
+                                    -->
+                                    <Button Command="{Binding PickCommand}"
+                                            Width="50" Height="44"
+                                            Margin="3"
+                                            Padding="0"
+                                            BorderThickness="0"
+                                            CornerRadius="3"
+                                            Background="{Binding Brush}"/>
+
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </Popup>
+            </Panel>
 
         </Grid>
     </Border>
