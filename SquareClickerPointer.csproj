@@ -23,5 +23,11 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <!--
+      Microsoft.Extensions.DependencyInjection provides IServiceCollection, ServiceCollection,
+      and BuildServiceProvider(). CommunityToolkit.Mvvm's Ioc.Default wraps this container,
+      so we need this package to register and resolve our ViewModels and services.
+    -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
   </ItemGroup>
 </Project>

@@ -4,7 +4,7 @@
         xmlns:views="using:SquareClickerPointer.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="750"
+        mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="760"
         x:Class="SquareClickerPointer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -16,7 +16,53 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <!-- PointControlView owns its own ViewModel; no binding to MainWindowViewModel needed here -->
-    <views:PointControlView/>
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+     MainWindow layout
+    ═══════════════════════════════════════════════════════════════════════════════
+
+     WHY MainWindowViewModel does NOT mediate between the two controls:
+     ────────────────────────────────────────────────────────────────────
+     A common (but wrong) pattern is to put the "wiring" in the parent ViewModel:
+
+         // MainWindowViewModel — BAD example
+         public void OnDotMoved(double x, double y)
+         {
+             TriangleData.LastX = x;    // tightly coupled — knows both children
+             TriangleData.Calculate();
+         }
+
+     This makes MainWindowViewModel a "god object" that knows about every child.
+     Adding a third panel means editing MainWindowViewModel.  Deleting one panel
+     means editing it again.  The parent becomes a bottleneck.
+
+     Instead, the two controls communicate exclusively through IMessenger:
+
+         PointControlViewModel  ──(DotReleasedMessage)──►  WeakReferenceMessenger
+                                                                    │
+                                                                    ▼
+                                                    TriangleAlphaDataViewModel
+
+     MainWindow is just a container — it places the Views on screen and stays out
+     of the communication.  Adding a fourth panel that reacts to the same event is
+     zero changes to existing code; you just register a new subscriber.
+
+     EACH CONTROL OWNS ITS OWN VIEWMODEL:
+     ──────────────────────────────────────
+     Both user controls set their own DataContext from Ioc.Default in their
+     constructors.  MainWindow does not set or pass DataContext to them.
+     This makes each control independently reusable — you could place
+     PointControlView in a completely different window with the same result.
+    -->
+
+    <StackPanel Spacing="10" Margin="10">
+
+        <!-- SquareClickerPointer — publisher of DotReleasedMessage -->
+        <views:PointControlView/>
+
+        <!-- TriangleAlphaData — subscriber to DotReleasedMessage -->
+        <views:TriangleAlphaDataView/>
+
+    </StackPanel>
 
 </Window>

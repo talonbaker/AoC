@@ -1,0 +1,223 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SquareClickerPointer.ViewModels"
+             x:Class="SquareClickerPointer.Views.TriangleAlphaDataView"
+             x:DataType="vm:TriangleAlphaDataViewModel"
+             Width="240">
+
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+     TriangleAlphaDataView  —  display panel for geometry calculations
+    ═══════════════════════════════════════════════════════════════════════════════
+
+     WHAT THIS VIEW DOES
+     ───────────────────
+     Shows the results of triangle geometry calculated by TriangleAlphaDataViewModel
+     whenever a DotReleasedMessage arrives from the message bus.
+
+     The only intelligence in this file is LAYOUT.  Every value shown here comes
+     from a binding to the ViewModel.  There is no logic, no converters, no code
+     that "knows" what the numbers mean.
+
+     BINDING NOTES
+     ─────────────
+     • x:DataType="vm:TriangleAlphaDataViewModel" enables COMPILED bindings,
+       which are validated at build time.  If you mis-type a property name you get
+       a compile error, not a silent runtime failure.
+
+     • {Binding !HasData}  — the leading ! is a compiled-binding negation operator
+       supported by Avalonia 11.  No converter needed.
+
+     • StringFormat={}{0:F2}  — the leading {} escapes the opening { so the XAML
+       parser does not interpret {0:F2} as a markup extension.  This is standard
+       Avalonia / WPF StringFormat syntax.
+
+     • {StaticResource ...} resolves from App.axaml's ResourceDictionary.
+       Those brushes (Accent, TextSecondary, etc.) are defined globally so all
+       controls share the same colour palette without duplicating hex codes.
+    -->
+
+    <Border Background="{StaticResource AppBackground}"
+            CornerRadius="8"
+            ClipToBounds="True">
+
+        <StackPanel Margin="12,12,12,14" Spacing="10">
+
+            <!-- ── Header ── -->
+            <StackPanel Spacing="3">
+                <TextBlock Text="Triangle Alpha Data"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           FontFamily="Inter,Segoe UI,Sans-Serif"
+                           Foreground="{StaticResource TextPrimary}"/>
+                <!--
+                    This subtitle tells any developer (or user) exactly where the
+                    data comes from: subscribed to the SquareClickerPointer release
+                    event via IMessenger.  Documenting the data source in the UI
+                    itself is useful during development and debugging.
+                -->
+                <TextBlock Text="Subscribed to SquareClickerPointer · release event"
+                           FontSize="9"
+                           FontFamily="Inter,Segoe UI,Sans-Serif"
+                           Foreground="{StaticResource TextMuted}"/>
+            </StackPanel>
+
+            <!-- Thin separator line, same style used in PointControlView -->
+            <Border Height="1" Background="{StaticResource BorderSubtle}"/>
+
+            <!-- ── Placeholder  (visible until first DotReleasedMessage arrives) ── -->
+            <!--
+                IsVisible="{Binding !HasData}" uses the compiled-binding negation
+                operator.  HasData starts false; this panel shows.  On first
+                DotReleasedMessage, HasData becomes true, this panel hides, and the
+                results panel below becomes visible.  No code-behind, no converter.
+            -->
+            <Border IsVisible="{Binding !HasData}"
+                    Background="{StaticResource Surface}"
+                    CornerRadius="4"
+                    Padding="10,14">
+                <TextBlock Text="Release the dot on the canvas above to calculate."
+                           FontSize="11"
+                           FontFamily="Inter,Segoe UI,Sans-Serif"
+                           Foreground="{StaticResource TextSecondary}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"/>
+            </Border>
+
+            <!-- ── Results panel  (visible once data has been received) ── -->
+            <StackPanel IsVisible="{Binding HasData}" Spacing="8">
+
+                <!-- Received X / Y row -->
+                <!--
+                    These echo the raw values from the message so you can verify at
+                    a glance that the subscription is receiving the right input.
+                    They use the axis-label style defined in ControlStyles.axaml.
+                -->
+                <Grid ColumnDefinitions="*,*">
+                    <StackPanel Grid.Column="0" Spacing="1">
+                        <TextBlock Text="X" Classes="axis-label" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding LastX, StringFormat={}{0:F2}}"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Accent}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="1">
+                        <TextBlock Text="Y" Classes="axis-label" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding LastY, StringFormat={}{0:F2}}"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Accent}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Height="1" Background="{StaticResource BorderSubtle}"/>
+
+                <!-- Computed geometry values -->
+                <!--
+                    Each row: formula label on the left, computed value on the right.
+                    The label shows the actual math (e.g. "√(X²+Y²)") so this panel
+                    is self-documenting — a reader immediately knows what they are
+                    looking at without needing to open the ViewModel.
+                -->
+
+                <!-- Distance: √(X²+Y²) -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Distance"
+                                   FontSize="10"
+                                   FontFamily="Inter,Segoe UI,Sans-Serif"
+                                   Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Text="√(X²+Y²)"
+                                   FontSize="9"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Distance, StringFormat={}{0:F3}}"
+                               FontFamily="Consolas,Courier New,Monospace"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimary}"/>
+                </Grid>
+
+                <!-- Alpha angle: atan2(Y,X) in degrees -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Alpha  α"
+                                   FontSize="10"
+                                   FontFamily="Inter,Segoe UI,Sans-Serif"
+                                   Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Text="atan2(Y,X) °"
+                                   FontSize="9"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <!--
+                        StringFormat={}{0:F1}°  appends the degree symbol directly.
+                        The ViewModel exposes AngleDegrees as a plain double;
+                        the View decides how to present it (1 decimal place + °).
+                        This is correct MVVM: the View owns presentation, the VM
+                        owns calculation.
+                    -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding AngleDegrees, StringFormat={}{0:F1}°}"
+                               FontFamily="Consolas,Courier New,Monospace"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimary}"/>
+                </Grid>
+
+                <!-- Triangle area: ½·X·Y -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Triangle Area"
+                                   FontSize="10"
+                                   FontFamily="Inter,Segoe UI,Sans-Serif"
+                                   Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Text="½ · X · Y"
+                                   FontSize="9"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding TriangleArea, StringFormat={}{0:F3}}"
+                               FontFamily="Consolas,Courier New,Monospace"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimary}"/>
+                </Grid>
+
+                <!-- Perimeter: X + Y + √(X²+Y²) -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Perimeter"
+                                   FontSize="10"
+                                   FontFamily="Inter,Segoe UI,Sans-Serif"
+                                   Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Text="X+Y+√(X²+Y²)"
+                                   FontSize="9"
+                                   FontFamily="Consolas,Courier New,Monospace"
+                                   Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Perimeter, StringFormat={}{0:F3}}"
+                               FontFamily="Consolas,Courier New,Monospace"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimary}"/>
+                </Grid>
+
+            </StackPanel>
+
+        </StackPanel>
+    </Border>
+
+</UserControl>
