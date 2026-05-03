@@ -160,7 +160,7 @@ public partial class TriangleAlphaDataViewModel : ViewModelBase
         //   parameter instead of capturing it in a closure.  The messenger stores the
         //   recipient weakly; the delegate itself holds no strong reference.
         //
-        _messenger.Register<DotReleasedMessage>(this, (recipient, message) =>
+        _messenger.Register<TriangleAlphaDataViewModel, DotReleasedMessage>(this, (recipient, message) =>
         {
             recipient.OnDotReleased(message);
         });
