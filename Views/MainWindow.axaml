@@ -63,6 +63,33 @@
         <!-- TriangleAlphaData — subscriber to DotReleasedMessage -->
         <views:TriangleAlphaDataView/>
 
+        <!--
+        ═══════════════════════════════════════════════════════════════════════
+         EXPANDABLE CONTAINERS
+        ═══════════════════════════════════════════════════════════════════════
+
+         Three independent ExpandableContainerView instances placed side-by-side
+         (in a parent StackPanel here, but they work anywhere in a layout).
+
+         EACH CONTAINER IS SELF-CONTAINED:
+           • x:Name gives us a handle in MainWindow.axaml.cs so we can call
+             Container1View.ViewModel.SetItems(…) to populate it externally.
+           • Each container resolves its own Transient ExpandableContainerViewModel
+             from the DI container inside its code-behind constructor.
+           • They share the IMessenger singleton — that is how accordion
+             expand/collapse is coordinated without any direct references between them.
+
+         NO MEDIATOR:
+           MainWindow does not wire the containers together.  It only places them
+           on screen and seeds their data.  The accordion behavior is handled
+           entirely via ContainerExpandedMessage on the shared IMessenger.
+           Adding a fourth container is one line of XAML and one seeding call —
+           zero changes to the existing containers.
+        -->
+        <views:ExpandableContainerView x:Name="Container1View"/>
+        <views:ExpandableContainerView x:Name="Container2View"/>
+        <views:ExpandableContainerView x:Name="Container3View"/>
+
     </StackPanel>
 
 </Window>

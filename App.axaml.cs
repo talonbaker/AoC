@@ -137,6 +137,26 @@ public partial class App : Application
                 // The shared IMessenger is what makes the message route between them.
                 .AddSingleton<TriangleAlphaDataViewModel>()
 
+                // ── ItemListViewModel ─────────────────────────────────────────────
+                // TRANSIENT: each ExpandableContainerViewModel owns one private list.
+                // Transient means "create a new instance for every caller."
+                // When DI constructs an ExpandableContainerViewModel, it automatically
+                // creates a fresh ItemListViewModel and injects it via the constructor.
+                // Container 1's list never shares state with Container 2's list.
+                .AddTransient<ItemListViewModel>()
+
+                // ── ExpandableContainerViewModel ──────────────────────────────────
+                // TRANSIENT: there are multiple containers in the window (Container 1,
+                // 2, 3…), each with its own title, items, and expanded/collapsed state.
+                // Transient ensures each ExpandableContainerView.axaml.cs call to
+                // GetRequiredService<ExpandableContainerViewModel>() returns a NEW,
+                // independent instance — not the same one shared across all views.
+                //
+                // DI automatically injects:
+                //   IMessenger        → the shared singleton (for accordion pub/sub)
+                //   ItemListViewModel → a fresh transient instance (per-container list)
+                .AddTransient<ExpandableContainerViewModel>()
+
                 .BuildServiceProvider()
         );
     }

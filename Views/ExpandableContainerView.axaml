@@ -1,0 +1,301 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SquareClickerPointer.ViewModels"
+             xmlns:views="using:SquareClickerPointer.Views"
+             x:Class="SquareClickerPointer.Views.ExpandableContainerView"
+             x:DataType="vm:ExpandableContainerViewModel">
+
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+     ExpandableContainerView  —  the outer collapsible panel
+    ═══════════════════════════════════════════════════════════════════════════════
+
+     LAYOUT OVERVIEW
+     ────────────────
+     The control has two visible states:
+
+       COLLAPSED (IsExpanded = false)
+       ┌─────────────────────────────┐
+       │  >  Container Title         │  ← header button only
+       └─────────────────────────────┘
+
+       EXPANDED (IsExpanded = true)
+       ┌─────────────────────────────┐
+       │  <  Container Title         │  ← header button
+       │  ┌─────────────┐ [⊟]       │  ← search + filter row
+       │  │ search...  🔍│           │
+       │  └─────────────┘           │
+       │  [All][⭐][⬡][△][□]        │  ← filter panel (when IsFilterOpen)
+       │  ┌─────────────────────────┐│
+       │  │ 🔒 Item 1  ⭐  1  ■    ││  ← ItemListView (scrollable)
+       │  │ 🔒 Item 2  ⬡  2  ■    ││
+       │  └─────────────────────────┘│
+       └─────────────────────────────┘
+
+     DATACONTEXT
+     ─────────────
+     Set in ExpandableContainerView.axaml.cs to a Transient
+     ExpandableContainerViewModel from the DI container.
+
+     COMPILED BINDINGS
+     ──────────────────
+     x:DataType="vm:ExpandableContainerViewModel" enables compiled bindings for
+     this file.  The nested ItemListView uses DataContext="{Binding ItemList}"
+     which hands off an ItemListViewModel — ItemListView.axaml then uses
+     x:DataType="vm:ItemListViewModel" for its own compiled bindings.
+
+     PUB / SUB CONNECTION
+     ──────────────────────
+     This view does not know about other containers.  The ViewModel publishes
+     ContainerExpandedMessage when expanding, and collapses itself when it
+     receives that message from a sibling — all invisible to this XAML.
+    -->
+
+    <!-- Outer frame — matches the bordered box shown in the mockup -->
+    <Border Background="{DynamicResource Surface}"
+            BorderBrush="{DynamicResource BorderSubtle}"
+            BorderThickness="1"
+            CornerRadius="6"
+            ClipToBounds="True">
+
+        <StackPanel>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 HEADER ROW  —  always visible, clickable to expand/collapse
+                 ══════════════════════════════════════════════════════════════════
+
+                 Using a Button (not a Border with a PointerPressed handler) because:
+                   • Button handles keyboard activation (Enter, Space) for free.
+                   • Button has :pointerover and :pressed pseudo-classes for styling.
+                   • A button is semantically correct — this IS an action.
+
+                 HorizontalAlignment=Stretch makes the button fill the full width.
+                 HorizontalContentAlignment=Left left-aligns the content inside.
+                 BorderThickness=0, Background=Transparent: we want our own visual
+                 style, not the FluentTheme button chrome.
+            -->
+            <Button Command="{Binding ToggleExpandCommand}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="12,10"
+                    Classes="container-header-btn">
+
+                <Grid ColumnDefinitions="Auto,*">
+
+                    <!-- Chevron — two TextBlocks, only one visible at a time.
+                         IsVisible="{Binding IsExpanded}" / {Binding !IsExpanded}
+                         are compiled bool bindings.  Avalonia supports the ! prefix
+                         for negation on bool properties — no converter needed.
+                         &lt; is the XML entity for the < character.               -->
+                    <StackPanel Grid.Column="0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,10,0">
+                        <TextBlock Text="&#x276F;"
+                                   IsVisible="{Binding !IsExpanded}"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="&#x276E;"
+                                   IsVisible="{Binding IsExpanded}"
+                                   Foreground="{DynamicResource Accent}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Container title — set externally via ViewModel.Title -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Title}"
+                               Foreground="{DynamicResource TextPrimary}"
+                               FontFamily="Inter,Segoe UI,Sans-Serif"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+
+                </Grid>
+            </Button>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 EXPANDED CONTENT  —  hidden when container is collapsed
+                 ══════════════════════════════════════════════════════════════════
+
+                 IsVisible="{Binding IsExpanded}" — compiled binding, hides this
+                 entire section including the search row and the item list when
+                 the container is collapsed.
+
+                 WHY IsVisible instead of collapsing the height?
+                   IsVisible=false in Avalonia removes the element from layout
+                   (equivalent to Visibility.Collapsed in WPF).  The container
+                   shrinks to header-only size when collapsed.  A height animation
+                   could be added later by wrapping in an Expander-style control.
+            -->
+            <Border IsVisible="{Binding IsExpanded}"
+                    Padding="10,6,10,10"
+                    BorderBrush="{DynamicResource BorderSubtle}"
+                    BorderThickness="0,1,0,0">
+
+                <StackPanel Spacing="8">
+
+                    <!-- ── Search + Filter row ──────────────────────────────────
+                         Grid with two columns: search box (*) and filter button (Auto).
+                    -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+
+                        <!-- Search box — styled like the existing .value-box
+                             border from ControlStyles.axaml.
+                             Text="{Binding SearchText}" is a compiled two-way binding.
+                             Avalonia's default for TextBox.Text is TwoWay with
+                             PropertyChanged trigger — every keystroke updates SearchText,
+                             which fires OnSearchTextChanged, which calls ApplyFilter.
+                             This gives instant live filtering with no extra code.        -->
+                        <Border Grid.Column="0"
+                                Classes="value-box"
+                                MinWidth="0"
+                                Height="30">
+                            <TextBox Text="{Binding SearchText}"
+                                     Watermark="Search  🔍"
+                                     FontFamily="Inter,Segoe UI,Sans-Serif"
+                                     FontSize="12"/>
+                        </Border>
+
+                        <!-- Filter toggle button — funnel icon.
+                             IsChecked="{Binding IsFilterOpen, Mode=TwoWay}":
+                               TwoWay means clicking the button toggles IsChecked, and
+                               the binding immediately writes the new value back to
+                               IsFilterOpen on the VM.  No separate Command is needed —
+                               the two-way binding IS the command for a simple toggle.
+                             WHY NOT also set Command={Binding ToggleFilterCommand}?
+                               A ToggleButton click already changes IsChecked → binding
+                               writes IsFilterOpen.  If the Command also does
+                               "IsFilterOpen = !IsFilterOpen", IsFilterOpen would be
+                               toggled TWICE and end up back where it started: broken.
+                               One mechanism per action. -->
+                        <ToggleButton Grid.Column="1"
+                                      IsChecked="{Binding IsFilterOpen, Mode=TwoWay}"
+                                      Width="34" Height="30"
+                                      Padding="6,4"
+                                      Classes="lock-btn"
+                                      ToolTip.Tip="Filter by shape">
+                            <!-- Funnel / filter icon path (12×13 viewbox) -->
+                            <Viewbox Width="12" Height="13" Stretch="Uniform">
+                                <Canvas Width="12" Height="13">
+                                    <Path Canvas.Left="0" Canvas.Top="0"
+                                          Data="M 0,1 L 12,1 L 7.5,7 L 7.5,12 L 4.5,12 L 4.5,7 Z"
+                                          Fill="{DynamicResource TextSecondary}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </ToggleButton>
+
+                    </Grid>
+
+                    <!-- ── Filter dropdown panel ────────────────────────────────
+                         Visible only when IsFilterOpen = true.
+                         Contains one button per filter option (All + 4 shapes).
+                         Each button calls a named command on ExpandableContainerViewModel.
+
+                         WHY named commands instead of a parametrised command?
+                           Parametrised commands require boxing the enum value and a
+                           converter in XAML — extra indirection.  One command per
+                           option is verbose but fully explicit and type-safe at compile
+                           time.  For five fixed options this is the right trade-off.
+                    -->
+                    <Border IsVisible="{Binding IsFilterOpen}"
+                            Background="{DynamicResource SurfaceDeep}"
+                            BorderBrush="{DynamicResource BorderSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="6">
+
+                        <WrapPanel Orientation="Horizontal">
+
+                            <!-- "All" — clears the active shape filter -->
+                            <Button Content="All"
+                                    Command="{Binding FilterAllCommand}"
+                                    Classes="icon-btn"
+                                    Margin="2"
+                                    Padding="8,4"
+                                    FontSize="11"/>
+
+                            <!-- Star filter -->
+                            <Button Command="{Binding FilterStarCommand}"
+                                    Classes="icon-btn"
+                                    Margin="2"
+                                    Padding="6,4"
+                                    Width="34"
+                                    ToolTip.Tip="Stars only">
+                                <Canvas Width="14" Height="14">
+                                    <Path Canvas.Left="0" Canvas.Top="0"
+                                          Data="M 7,0.5 L 8.58,4.86 L 13.26,5.09 L 9.64,7.81 L 10.88,12.32 L 7,9.75 L 3.12,12.32 L 4.36,7.81 L 0.74,5.09 L 5.42,4.86 Z"
+                                          Fill="#FF4444"/>
+                                </Canvas>
+                            </Button>
+
+                            <!-- Hexagon filter -->
+                            <Button Command="{Binding FilterHexagonCommand}"
+                                    Classes="icon-btn"
+                                    Margin="2"
+                                    Padding="6,4"
+                                    Width="34"
+                                    ToolTip.Tip="Hexagons only">
+                                <Canvas Width="14" Height="14">
+                                    <Path Canvas.Left="0" Canvas.Top="0"
+                                          Data="M 7,0.5 L 12.3,3.75 L 12.3,10.25 L 7,13.5 L 1.7,10.25 L 1.7,3.75 Z"
+                                          Fill="#44BB44"/>
+                                </Canvas>
+                            </Button>
+
+                            <!-- Triangle filter -->
+                            <Button Command="{Binding FilterTriangleCommand}"
+                                    Classes="icon-btn"
+                                    Margin="2"
+                                    Padding="6,4"
+                                    Width="34"
+                                    ToolTip.Tip="Triangles only">
+                                <Canvas Width="14" Height="14">
+                                    <Path Canvas.Left="0" Canvas.Top="0"
+                                          Data="M 7,0.5 L 13.5,13.5 L 0.5,13.5 Z"
+                                          Fill="#4499FF"/>
+                                </Canvas>
+                            </Button>
+
+                            <!-- Square filter -->
+                            <Button Command="{Binding FilterSquareCommand}"
+                                    Classes="icon-btn"
+                                    Margin="2"
+                                    Padding="6,4"
+                                    Width="34"
+                                    ToolTip.Tip="Squares only">
+                                <Canvas Width="14" Height="14">
+                                    <Path Canvas.Left="0" Canvas.Top="0"
+                                          Data="M 1.5,1.5 L 12.5,1.5 L 12.5,12.5 L 1.5,12.5 Z"
+                                          Fill="#AA55CC"/>
+                                </Canvas>
+                            </Button>
+
+                        </WrapPanel>
+                    </Border>
+
+                    <!-- ── Item list ─────────────────────────────────────────────
+                         DataContext="{Binding ItemList}" is a compiled binding that
+                         resolves to the ExpandableContainerViewModel.ItemList property
+                         (type: ItemListViewModel).  Avalonia sets that as the DataContext
+                         of the ItemListView instance.
+
+                         ItemListView.axaml.cs does NOT set its own DataContext, so this
+                         binding is the sole authority on what DataContext ItemListView has.
+
+                         This is the "parent hands the child its ViewModel" pattern —
+                         the alternative to DI for child ViewModels that are owned by
+                         a parent and should not be resolved independently.
+                    -->
+                    <views:ItemListView DataContext="{Binding ItemList}"/>
+
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </Border>
+
+</UserControl>

@@ -162,4 +162,24 @@
         <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
     </Style>
 
+    <!-- ════════════════════════════════════════════════════════════════════
+         CONTAINER HEADER BUTTON
+         Transparent button used for the expand/collapse header row of
+         ExpandableContainerView.  Provides hover and press feedback without
+         the FluentTheme's default chrome (border, background).
+         ════════════════════════════════════════════════════════════════════ -->
+    <Style Selector="Button.container-header-btn">
+        <Setter Property="Background"   Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <Style Selector="Button.container-header-btn:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#26FFFFFF"/>
+    </Style>
+
+    <Style Selector="Button.container-header-btn:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#3675FF22"/>
+    </Style>
+
 </Styles>

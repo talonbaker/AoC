@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SquareClickerPointer.ViewModels"
+             xmlns:views="using:SquareClickerPointer.Views"
+             x:Class="SquareClickerPointer.Views.ItemListView"
+             x:DataType="vm:ItemListViewModel">
+
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════════
+     ItemListView  —  the scrollable item list inside the expanded container
+    ═══════════════════════════════════════════════════════════════════════════════
+
+     WHAT THIS VIEW DOES
+     ────────────────────
+     Displays FilteredItems from ItemListViewModel as a vertical scrollable list
+     of ListItemView rows.  Each row corresponds to one ListItemViewModel.
+
+     WHERE DOES THE DATACONTEXT COME FROM?
+     ───────────────────────────────────────
+     This view does NOT set its own DataContext in code-behind (ItemListView.axaml.cs
+     is nearly empty).  Instead, ExpandableContainerView.axaml places this view with:
+
+         <views:ItemListView DataContext="{Binding ItemList}"/>
+
+     That binding resolves to the ExpandableContainerViewModel.ItemList property,
+     which is an ItemListViewModel instance.  Avalonia then propagates that as
+     the DataContext into all child bindings in this file.
+
+     WHY this DataContext pattern instead of DI in code-behind?
+     ─────────────────────────────────────────────────────────────
+     DI is for shared services (IMessenger) and top-level singletons/transients
+     that need to be created fresh.  ItemListViewModel is already created and owned
+     by ExpandableContainerViewModel — there is no need to create another one.
+     Passing it via DataContext binding is the standard Avalonia way to connect
+     parent ViewModels to child views.
+
+     ITEMS CONTROL — how rows are generated
+     ────────────────────────────────────────
+     ItemsControl iterates FilteredItems (ObservableCollection<ListItemViewModel>).
+     For each item it instantiates one copy of the DataTemplate, which contains
+     <views:ListItemView/>, and sets that view's DataContext to the current
+     ListItemViewModel.  This is the MVVM list pattern: the view knows nothing
+     about the number of items; it just declares the template for ONE item.
+    -->
+
+    <!-- Bordered list area — matches the "inner box" shown in the design mockup -->
+    <Border Background="{DynamicResource SurfaceDeep}"
+            BorderBrush="{DynamicResource BorderSubtle}"
+            BorderThickness="1"
+            CornerRadius="4"
+            MinHeight="60"
+            MaxHeight="260">
+
+        <!-- ScrollViewer enables vertical scrolling when the list overflows.
+             The thin scrollbar on the right in the mockup comes from here.
+             VerticalScrollBarVisibility="Auto" hides the scrollbar when not needed. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+
+            <ItemsControl ItemsSource="{Binding FilteredItems}">
+
+                <!--
+                ItemTemplate defines the visual for ONE item in the collection.
+                Avalonia instantiates this template once per item and sets its
+                DataContext to the corresponding ListItemViewModel.
+
+                x:DataType="vm:ListItemViewModel" tells the compiled-binding system
+                what type each DataTemplate instance's DataContext will be.
+                Without this, compiled bindings inside the template would fail.
+                -->
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ListItemViewModel">
+
+                        <!-- ListItemView is a separate user control — each row is
+                             a fully encapsulated unit.  Its code-behind does NOT
+                             set DataContext; Avalonia's ItemsControl does that here. -->
+                        <views:ListItemView/>
+
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+
+            </ItemsControl>
+
+        </ScrollViewer>
+    </Border>
+
+</UserControl>
