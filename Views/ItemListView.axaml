@@ -28,7 +28,7 @@
 
      WHY this DataContext pattern instead of DI in code-behind?
      ─────────────────────────────────────────────────────────────
-     DI is for shared services (IMessenger) and top-level singletons/transients
+     DI is for shared services (event buses) and top-level singletons/transients
      that need to be created fresh.  ItemListViewModel is already created and owned
      by ExpandableContainerViewModel — there is no need to create another one.
      Passing it via DataContext binding is the standard Avalonia way to connect

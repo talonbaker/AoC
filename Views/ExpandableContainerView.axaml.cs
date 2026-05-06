@@ -26,8 +26,8 @@ namespace SquareClickerPointer.Views;
 //  Each call to GetRequiredService<ExpandableContainerViewModel>() creates a NEW
 //  instance.  This means Container1, Container2, and Container3 each get their
 //  own independent ExpandableContainerViewModel — their own title, their own
-//  item list, their own IsExpanded state.  They share only the IMessenger
-//  singleton (injected into each VM's constructor by the DI container).
+//  item list, their own IsExpanded state.  They share only the event-bus
+//  singletons (injected into each VM's constructor by the DI container).
 //
 //  WHY InitializeComponent() AFTER setting DataContext?
 //  ──────────────────────────────────────────────────────
@@ -55,8 +55,9 @@ public partial class ExpandableContainerView : UserControl
         //
         // Transient registration means each new ExpandableContainerView gets its
         // own brand-new ExpandableContainerViewModel with its own ItemListViewModel.
-        // The DI container injects both IMessenger (singleton) and ItemListViewModel
-        // (transient) into the ExpandableContainerViewModel constructor automatically.
+        // The DI container injects the event-bus singletons (ContainerEventBus,
+        // ItemColorEventBus, ItemLockEventBus, ItemShapeEventBus) and a fresh
+        // transient ItemListViewModel into the constructor automatically.
         ViewModel   = Ioc.Default.GetRequiredService<ExpandableContainerViewModel>();
 
         // ── Step 2: Bind the ViewModel to the View ───────────────────────────

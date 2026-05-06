@@ -38,9 +38,10 @@ namespace SquareClickerPointer.ViewModels;
 //  ItemListViewModel for it automatically (constructor injection).
 //  Container 1's list never shares state with Container 2's list.
 //
-//  NOTE: This class does NOT take IMessenger because it never sends or receives
-//  messages directly.  It is pure state management.  Messages are the concern of
-//  its parent (ExpandableContainerViewModel) and of ListItemViewModel itself.
+//  NOTE: This class does NOT take any event bus because it never raises or
+//  subscribes to events directly.  It is pure state management.  Events are the
+//  concern of its parent (ExpandableContainerViewModel) and of ListItemViewModel
+//  itself.
 
 /// <summary>
 /// Child ViewModel owned by <see cref="ExpandableContainerViewModel"/>.

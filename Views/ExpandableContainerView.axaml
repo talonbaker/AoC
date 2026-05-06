@@ -46,9 +46,10 @@
 
      PUB / SUB CONNECTION
      ──────────────────────
-     This view does not know about other containers.  The ViewModel publishes
-     ContainerExpandedMessage when expanding, and collapses itself when it
-     receives that message from a sibling — all invisible to this XAML.
+     This view does not know about other containers.  The ViewModel raises the
+     ContainerExpanded event on ContainerEventBus when expanding, and collapses
+     itself when it receives that event from a sibling — all invisible to this
+     XAML.
     -->
 
     <!-- Outer frame — matches the bordered box shown in the mockup -->

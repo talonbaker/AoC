@@ -26,7 +26,7 @@ namespace SquareClickerPointer.Views;
 //    • Domain calculations  (those are in PointControlViewModel).
 //    • Message publishing   (CommitPosition() delegates that to the ViewModel).
 //    • References to other Views or other ViewModels.
-//    • Any IMessenger usage (the View has no reason to touch the message bus).
+//    • Any event-bus usage (the View has no reason to touch the buses directly).
 //
 //  CHANGE FROM PREVIOUS VERSION
 //  ─────────────────────────────
@@ -41,8 +41,8 @@ namespace SquareClickerPointer.Views;
 //    (c) Know the View's event signature.
 //
 //  All three are removed.  Cross-component communication now flows entirely through
-//  IMessenger (PointControlViewModel → DotReleasedMessage → TriangleAlphaDataViewModel).
-//  This View is no longer part of that channel at all.
+//  DotPositionEventBus (PointControlViewModel → DotReleased event →
+//  TriangleAlphaDataViewModel).  This View is no longer part of that channel at all.
 
 /// <summary>
 /// Code-behind for the SquareClickerPointer (2-D pad + sliders) user control.
@@ -72,16 +72,16 @@ public partial class PointControlView : UserControl
         // GetRequiredService<T>() looks up the registered singleton and returns it.
         //
         // WHY NOT new PointControlViewModel() here:
-        //   PointControlViewModel requires an IMessenger argument.  If we constructed
-        //   it manually we would have to source the messenger ourselves — which means
-        //   this View would need to know where the messenger lives, pulling it into
-        //   a concern it should not have.  The container owns that wiring.
+        //   PointControlViewModel requires a DotPositionEventBus argument.  If we
+        //   constructed it manually we would have to source the bus ourselves —
+        //   which means this View would need to know where the bus lives, pulling
+        //   it into a concern it should not have.  The container owns that wiring.
         //
         //   More critically: constructing a NEW ViewModel here would give it a
-        //   DIFFERENT IMessenger instance than TriangleAlphaDataViewModel is listening
-        //   on.  The message would be published to a messenger with no subscribers —
-        //   TriangleAlphaData would never update.  Singletons in the container prevent
-        //   that class of bug.
+        //   DIFFERENT DotPositionEventBus instance than TriangleAlphaDataViewModel
+        //   is listening on.  The event would be raised on a bus with no
+        //   subscribers — TriangleAlphaData would never update.  Singletons in the
+        //   container prevent that class of bug.
         //
         _vm = Ioc.Default.GetRequiredService<PointControlViewModel>();
 
@@ -166,7 +166,7 @@ public partial class PointControlView : UserControl
 
         var pos = e.GetPosition(canvas);
         // Live preview — updates X/Y (and therefore the crosshair and dot) but does
-        // NOT publish DotReleasedMessage.  See PointControlViewModel.SetFromCanvasPoint
+        // NOT raise the DotReleased event.  See PointControlViewModel.SetFromCanvasPoint
         // for the full explanation of why publishing is deferred to release.
         _vm.SetFromCanvasPoint(pos.X, pos.Y);
         e.Handled = true;
@@ -181,15 +181,16 @@ public partial class PointControlView : UserControl
         //
         // The user has finished their drag gesture.  We notify the ViewModel, which
         // is then responsible for deciding what "pointer released" means in domain
-        // terms — in this case, publishing a DotReleasedMessage.
+        // terms — in this case, raising the DotReleased event on DotPositionEventBus.
         //
-        // WHY _vm.CommitPosition() and not _messenger.Send() directly here:
+        // WHY _vm.CommitPosition() and not _dotBus.Publish() directly here:
         //
-        //   Sending a message directly from the View would mean the View knows about
-        //   DotReleasedMessage — a domain/application type.  The View is a UI concern;
-        //   it should not need to know about the message bus or message contracts.
-        //   The ViewModel owns that knowledge.  The View's job is just to say
-        //   "the user released the pointer", and the ViewModel decides what to do.
+        //   Raising an event directly from the View would mean the View knows about
+        //   the event bus and DotReleasedEventArgs — domain/application types.  The
+        //   View is a UI concern; it should not need to know about the buses or the
+        //   event-args contracts.  The ViewModel owns that knowledge.  The View's
+        //   job is just to say "the user released the pointer", and the ViewModel
+        //   decides what to do.
         //
         //   This maintains the MVVM boundary cleanly.
         //

@@ -13,7 +13,7 @@
      WHAT THIS VIEW DOES
      ───────────────────
      Shows the results of triangle geometry calculated by TriangleAlphaDataViewModel
-     whenever a DotReleasedMessage arrives from the message bus.
+     whenever the DotReleased event fires on the shared DotPositionEventBus.
 
      The only intelligence in this file is LAYOUT.  Every value shown here comes
      from a binding to the ViewModel.  There is no logic, no converters, no code
@@ -53,8 +53,8 @@
                 <!--
                     This subtitle tells any developer (or user) exactly where the
                     data comes from: subscribed to the SquareClickerPointer release
-                    event via IMessenger.  Documenting the data source in the UI
-                    itself is useful during development and debugging.
+                    event via DotPositionEventBus.  Documenting the data source in
+                    the UI itself is useful during development and debugging.
                 -->
                 <TextBlock Text="Subscribed to SquareClickerPointer · release event"
                            FontSize="9"
@@ -65,11 +65,11 @@
             <!-- Thin separator line, same style used in PointControlView -->
             <Border Height="1" Background="{StaticResource BorderSubtle}"/>
 
-            <!-- ── Placeholder  (visible until first DotReleasedMessage arrives) ── -->
+            <!-- ── Placeholder  (visible until first DotReleased event arrives) ── -->
             <!--
                 IsVisible="{Binding !HasData}" uses the compiled-binding negation
-                operator.  HasData starts false; this panel shows.  On first
-                DotReleasedMessage, HasData becomes true, this panel hides, and the
+                operator.  HasData starts false; this panel shows.  On the first
+                DotReleased event, HasData becomes true, this panel hides, and the
                 results panel below becomes visible.  No code-behind, no converter.
             -->
             <Border IsVisible="{Binding !HasData}"

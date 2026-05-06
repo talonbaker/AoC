@@ -3,8 +3,8 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using CommunityToolkit.Mvvm.DependencyInjection;
-using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
+using SquareClickerPointer.EventBuses;
 using SquareClickerPointer.ViewModels;
 using SquareClickerPointer.Views;
 using System.Linq;
@@ -27,10 +27,11 @@ namespace SquareClickerPointer;
 //     gains a new constructor parameter, you add one line here and nothing else changes.
 //
 //   • The container enforces lifetime rules.  Registering as Singleton means the same
-//     instance is returned to every caller — critical for shared state like IMessenger.
+//     instance is returned to every caller — critical for shared state like the event
+//     buses below (publisher and subscriber must share the same bus instance).
 //
 //   • You can swap implementations for testing.  In a test host you would register
-//     a mock IMessenger; everything else stays the same.
+//     a test-only event bus instance; everything else stays the same.
 //
 //  ORDER OF OPERATIONS (important — do not reorder)
 //  ─────────────────────────────────────────────────
@@ -65,9 +66,9 @@ public partial class App : Application
 
             // ── Step 2: Create the main window ───────────────────────────────────
             //
-            // MainWindowViewModel does not participate in IMessenger, so it is still
-            // constructed directly here.  If it ever needs messaging, register it in
-            // ConfigureServices() and retrieve it via Ioc.Default instead.
+            // MainWindowViewModel does not participate in any event bus, so it is
+            // still constructed directly here.  If it ever needs cross-VM events,
+            // register it in ConfigureServices() and retrieve it via Ioc.Default.
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainWindowViewModel(),
@@ -85,19 +86,18 @@ public partial class App : Application
     ///
     /// AddSingleton — one instance shared by everyone who asks for it.
     ///
-    ///   IMessenger:
-    ///     Must be a singleton.  Both PointControlViewModel (publisher) and
-    ///     TriangleAlphaDataViewModel (subscriber) must receive THE SAME messenger
-    ///     instance.  If they each got a different instance, published messages
-    ///     would have no subscribers to route to.
+    ///   Event buses (DotPositionEventBus, ItemColorEventBus, …):
+    ///     Must be singletons.  A publisher and its subscribers must receive THE SAME
+    ///     bus instance — if they each got a different bus, raised events would have
+    ///     no subscribers to invoke.
     ///
     ///   PointControlViewModel / TriangleAlphaDataViewModel:
     ///     Must also be singletons because:
     ///       (a) Each corresponds to exactly one View in the window — there is no
     ///           scenario where you want two independent copies.
-    ///       (b) TriangleAlphaDataViewModel registers with the messenger in its
+    ///       (b) TriangleAlphaDataViewModel subscribes to an event bus in its
     ///           constructor.  If it were Transient, every call to GetRequiredService
-    ///           would create a new instance that registers again, and old instances
+    ///           would create a new instance that subscribes again, and old instances
     ///           (still alive in the View) would accumulate stale subscriptions.
     ///
     /// AddTransient — a new instance per request (use for stateless services).
@@ -112,29 +112,25 @@ public partial class App : Application
         Ioc.Default.ConfigureServices(
             new ServiceCollection()
 
-                // ── IMessenger ────────────────────────────────────────────────────
-                // WeakReferenceMessenger.Default is the global process-wide messenger.
-                // Registering it as a singleton means every consumer that asks for
-                // IMessenger gets the same WeakReferenceMessenger.Default instance.
-                //
-                // WHY WeakReferenceMessenger over StrongReferenceMessenger:
-                //   WeakReferenceMessenger stores recipients with weak references, so
-                //   a ViewModel that goes out of scope can be garbage-collected even
-                //   while still "registered."  StrongReferenceMessenger would keep it
-                //   alive indefinitely — a memory leak in longer-lived applications.
-                .AddSingleton<IMessenger>(WeakReferenceMessenger.Default)
+                // ── Event buses ──────────────────────────────────────────────────
+                // Each bus carries one specific event type using the standard .NET
+                // EventHandler<TEventArgs> pattern.  Registering as singletons means
+                // every consumer (publisher or subscriber) receives the same instance,
+                // which is what allows raised events to reach their handlers.
+                .AddSingleton<DotPositionEventBus>()
+                .AddSingleton<ItemColorEventBus>()
+                .AddSingleton<ContainerEventBus>()
+                .AddSingleton<ItemLockEventBus>()
+                .AddSingleton<ItemShapeEventBus>()
 
                 // ── PointControlViewModel ─────────────────────────────────────────
-                // PUBLISHER: calls CommitPosition() → _messenger.Send(DotReleasedMessage)
-                // Receives: IMessenger (injected from above registration).
-                // The container injects IMessenger automatically because the constructor
-                // declares it as a parameter.  This is constructor injection.
+                // PUBLISHER: calls CommitPosition() → DotPositionEventBus.Publish(...)
+                // Receives: DotPositionEventBus (the singleton registered above).
                 .AddSingleton<PointControlViewModel>()
 
                 // ── TriangleAlphaDataViewModel ────────────────────────────────────
-                // SUBSCRIBER: registers for DotReleasedMessage in its constructor.
-                // Receives: IMessenger (same singleton instance as PointControlViewModel).
-                // The shared IMessenger is what makes the message route between them.
+                // SUBSCRIBER: subscribes to DotPositionEventBus.DotReleased in its
+                // constructor and unsubscribes in Dispose.
                 .AddSingleton<TriangleAlphaDataViewModel>()
 
                 // ── ItemListViewModel ─────────────────────────────────────────────
@@ -148,13 +144,13 @@ public partial class App : Application
                 // ── ExpandableContainerViewModel ──────────────────────────────────
                 // TRANSIENT: there are multiple containers in the window (Container 1,
                 // 2, 3…), each with its own title, items, and expanded/collapsed state.
-                // Transient ensures each ExpandableContainerView.axaml.cs call to
-                // GetRequiredService<ExpandableContainerViewModel>() returns a NEW,
-                // independent instance — not the same one shared across all views.
                 //
                 // DI automatically injects:
-                //   IMessenger        → the shared singleton (for accordion pub/sub)
-                //   ItemListViewModel → a fresh transient instance (per-container list)
+                //   ContainerEventBus   → the shared singleton (for accordion pub/sub)
+                //   ItemColorEventBus   → singleton (forwarded to ListItemViewModels)
+                //   ItemLockEventBus    → singleton (forwarded to ListItemViewModels)
+                //   ItemShapeEventBus   → singleton (forwarded to ListItemViewModels)
+                //   ItemListViewModel   → a fresh transient instance (per-container list)
                 .AddTransient<ExpandableContainerViewModel>()
 
                 .BuildServiceProvider()

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
-using SquareClickerPointer.Messages;
+using SquareClickerPointer.EventArgs;
+using SquareClickerPointer.EventBuses;
 using SquareClickerPointer.Models;
 
 namespace SquareClickerPointer.ViewModels;
@@ -30,8 +30,8 @@ namespace SquareClickerPointer.ViewModels;
 //       When these change, the VM calls ItemList.ApplyFilter() to rebuild the
 //       visible list.  The search TextBox and filter dropdown bind to these.
 //
-//    3. ACCORDION BEHAVIOR (pub/sub) — publishes ContainerExpandedMessage when
-//       expanding; subscribes to it to collapse when a sibling opens.
+//    3. ACCORDION BEHAVIOR (pub/sub) — raises ContainerEventBus.ContainerExpanded
+//       when expanding; subscribes to it to collapse when a sibling opens.
 //
 //  WHY is this registered as TRANSIENT in the DI container?
 //  ─────────────────────────────────────────────────────────
@@ -58,8 +58,8 @@ namespace SquareClickerPointer.ViewModels;
 //   External code
 //       │  SetItems(models[])
 //       ▼
-//   ExpandableContainerViewModel  ──publishes──▶  ContainerExpandedMessage
-//       │  ItemList.ApplyFilter()               (when expanding)
+//   ExpandableContainerViewModel  ──raises──▶  ContainerEventBus.ContainerExpanded
+//       │  ItemList.ApplyFilter()             (when expanding)
 //       │
 //       ▼
 //   ItemListViewModel.FilteredItems
@@ -67,24 +67,29 @@ namespace SquareClickerPointer.ViewModels;
 //       ▼  (ItemsControl binds to this)
 //   ListItemView rows  ──(TwoWay IsChecked)──▶  ListItemViewModel.IsLocked
 //                                                         │
-//                                                         ▼ publishes
-//                                               ItemLockToggledMessage
+//                                                         ▼ raises
+//                                            ItemLockEventBus.ItemLockToggled
 
 /// <summary>
 /// ViewModel for one expandable container panel.
 /// Set <see cref="Title"/> and call <see cref="SetItems"/> to populate it;
 /// the container handles all search, filter, and accordion behavior internally.
+/// Implements <see cref="IDisposable"/> because it subscribes to
+/// <see cref="ContainerEventBus.ContainerExpanded"/> in its constructor.
 /// </summary>
-public partial class ExpandableContainerViewModel : ViewModelBase
+public partial class ExpandableContainerViewModel : ViewModelBase, IDisposable
 {
-    private readonly IMessenger      _messenger;
+    private readonly ContainerEventBus _containerBus;
+    private readonly ItemColorEventBus _colorBus;
+    private readonly ItemLockEventBus  _lockBus;
+    private readonly ItemShapeEventBus _shapeBus;
     private readonly ItemListViewModel _itemList;
 
     // ── Unique identity ───────────────────────────────────────────────────────
     //
     // A new Guid is assigned at construction — each container instance is
     // guaranteed a unique ID even if you create many at once.
-    // This ID travels inside ContainerExpandedMessage so siblings can identify
+    // This ID travels inside ContainerExpandedEventArgs so siblings can identify
     // "was this message sent by ME or by someone else?"
 
     /// <summary>
@@ -154,42 +159,72 @@ public partial class ExpandableContainerViewModel : ViewModelBase
     // ── Constructor ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// DI constructs this by injecting the shared IMessenger singleton and a fresh
+    /// DI constructs this by injecting the shared event-bus singletons and a fresh
     /// Transient ItemListViewModel.  You never call this constructor manually.
     /// </summary>
-    /// <param name="messenger">
-    /// Shared message bus — same instance used by all other ViewModels in the app.
-    /// Used here to publish ContainerExpandedMessage and to subscribe to it.
+    /// <param name="containerBus">
+    /// Shared event bus carrying <see cref="ContainerExpandedEventArgs"/>.
+    /// Used here to raise ContainerExpanded when this container opens, and to
+    /// subscribe so we collapse when a sibling opens.
+    /// </param>
+    /// <param name="colorBus">
+    /// Shared <see cref="ItemColorEventBus"/>, forwarded to each
+    /// <see cref="ListItemViewModel"/> created by this container.
+    /// </param>
+    /// <param name="lockBus">
+    /// Shared <see cref="ItemLockEventBus"/>, forwarded to each
+    /// <see cref="ListItemViewModel"/> created by this container.
+    /// </param>
+    /// <param name="shapeBus">
+    /// Shared <see cref="ItemShapeEventBus"/>, forwarded to each
+    /// <see cref="ListItemViewModel"/> created by this container.
     /// </param>
     /// <param name="itemList">
     /// A fresh ItemListViewModel, injected by the DI container (Transient).
     /// Each ExpandableContainerViewModel gets its own, isolated list.
     /// </param>
-    public ExpandableContainerViewModel(IMessenger messenger, ItemListViewModel itemList)
+    public ExpandableContainerViewModel(
+        ContainerEventBus containerBus,
+        ItemColorEventBus colorBus,
+        ItemLockEventBus  lockBus,
+        ItemShapeEventBus shapeBus,
+        ItemListViewModel itemList)
     {
-        _messenger = messenger;
-        _itemList  = itemList;
+        _containerBus = containerBus;
+        _colorBus     = colorBus;
+        _lockBus      = lockBus;
+        _shapeBus     = shapeBus;
+        _itemList     = itemList;
 
         // ── Subscribe: accordion collapse ─────────────────────────────────────
         //
-        // When ANY container publishes ContainerExpandedMessage, we check:
-        //   "Is this message from ME (I just expanded)?  Ignore it."
-        //   "Is this message from a SIBLING?  Collapse myself."
+        // When ANY container raises ContainerExpanded, we check:
+        //   "Is this from ME (I just expanded)?  Ignore it."
+        //   "Is this from a SIBLING?  Collapse myself."
         //
-        // WHY the (recipient, message) pattern (not a closure capture):
-        //   See the detailed explanation in TriangleAlphaDataViewModel — the short
-        //   answer is that closures capture 'this' strongly, defeating the
-        //   WeakReferenceMessenger's ability to let this VM be garbage-collected.
-        //   The (recipient, message) overload stores only a weak reference to
-        //   'this'; the lambda receives it as a typed parameter instead.
-        _messenger.Register<ExpandableContainerViewModel, ContainerExpandedMessage>(
-            this,
-            (recipient, message) =>
-            {
-                // Only collapse if a DIFFERENT container expanded.
-                if (message.ContainerId != recipient.ContainerId)
-                    recipient.IsExpanded = false;
-            });
+        // The handler is a method group (OnContainerExpanded) rather than an
+        // inline lambda so the same delegate instance can be passed to both
+        // Subscribe and Unsubscribe.  Without that, Dispose's Unsubscribe call
+        // would silently fail to remove the handler.
+        _containerBus.Subscribe(OnContainerExpanded);
+    }
+
+    private void OnContainerExpanded(object? sender, ContainerExpandedEventArgs e)
+    {
+        // Only collapse if a DIFFERENT container expanded.
+        if (e.ContainerId != ContainerId)
+            IsExpanded = false;
+    }
+
+    // ── IDisposable ───────────────────────────────────────────────────────────
+    //
+    // The bus holds a strong reference to this ViewModel through the subscription
+    // delegate.  Calling Dispose() detaches the handler so the VM can be garbage
+    // collected once the owning View is unloaded.
+
+    public void Dispose()
+    {
+        _containerBus.Unsubscribe(OnContainerExpanded);
     }
 
     // ── Property-change hooks (partial methods, called by source generator) ───
@@ -221,7 +256,7 @@ public partial class ExpandableContainerViewModel : ViewModelBase
     /// <summary>
     /// Called when the user clicks anywhere on the header row.
     /// Expands or collapses the container body.
-    /// Publishes ContainerExpandedMessage when expanding so siblings can collapse.
+    /// Raises ContainerEventBus.ContainerExpanded when expanding so siblings can collapse.
     /// </summary>
     [RelayCommand]
     private void ToggleExpand()
@@ -230,14 +265,14 @@ public partial class ExpandableContainerViewModel : ViewModelBase
 
         if (IsExpanded)
         {
-            // Notify siblings via the message bus — they will set IsExpanded = false
-            // in their registered handler above.
+            // Notify siblings via the event bus — they will set IsExpanded = false
+            // in OnContainerExpanded above.
             //
-            // We only publish when EXPANDING.  Setting IsExpanded = false in another
-            // container's handler is a direct property assignment — it does NOT call
-            // ToggleExpand() on that container, so no further messages are sent.
+            // We only raise the event when EXPANDING.  Setting IsExpanded = false in
+            // another container's handler is a direct property assignment — it does
+            // NOT call ToggleExpand() on that container, so no further events fire.
             // No infinite loop.
-            _messenger.Send(new ContainerExpandedMessage(ContainerId));
+            _containerBus.Publish(this, new ContainerExpandedEventArgs(ContainerId));
         }
         else
         {
@@ -310,7 +345,8 @@ public partial class ExpandableContainerViewModel : ViewModelBase
     /// <param name="models">Raw data records built by the external caller.</param>
     public void SetItems(IEnumerable<ListItemModel> models)
     {
-        var viewModels = models.Select(m => new ListItemViewModel(m, ContainerId, _messenger));
+        var viewModels = models.Select(m =>
+            new ListItemViewModel(m, ContainerId, _colorBus, _lockBus, _shapeBus));
         _itemList.SetItems(viewModels);
     }
 
@@ -321,6 +357,7 @@ public partial class ExpandableContainerViewModel : ViewModelBase
     /// </summary>
     public void AddItem(ListItemModel model)
     {
-        _itemList.AddItem(new ListItemViewModel(model, ContainerId, _messenger));
+        _itemList.AddItem(
+            new ListItemViewModel(model, ContainerId, _colorBus, _lockBus, _shapeBus));
     }
 }

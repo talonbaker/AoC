@@ -22,18 +22,18 @@ namespace SquareClickerPointer.Views;
 //
 //  WHY Ioc.Default.GetRequiredService<T>() (not 'new TriangleAlphaDataViewModel()'):
 //
-//   1. TriangleAlphaDataViewModel requires IMessenger in its constructor.
+//   1. TriangleAlphaDataViewModel requires a DotPositionEventBus in its constructor.
 //      If we wrote 'new TriangleAlphaDataViewModel()' the compiler would error —
 //      there is no parameterless constructor (by design — see that file for why).
 //
-//   2. More importantly: the DI container registered IMessenger as a singleton.
+//   2. More importantly: the DI container registered DotPositionEventBus as a singleton.
 //      GetRequiredService resolves the same instance that PointControlViewModel
-//      already received.  That shared instance is what routes DotReleasedMessage
-//      from one ViewModel to the other.
+//      already received.  That shared bus is what carries DotReleased events from
+//      one ViewModel to the other.
 //
 //      If we somehow constructed a TriangleAlphaDataViewModel with a different
-//      IMessenger than PointControlViewModel uses, the subscription would exist
-//      on a different bus — messages would never arrive.  Singletons in the
+//      DotPositionEventBus than PointControlViewModel uses, the subscription would
+//      exist on a different bus — events would never arrive.  Singletons in the
 //      container are the structural guarantee that prevents this bug.
 
 /// <summary>
@@ -46,7 +46,7 @@ public partial class TriangleAlphaDataView : UserControl
     public TriangleAlphaDataView()
     {
         // Resolve the singleton ViewModel.  The container injects the shared
-        // IMessenger so this VM is on the same bus as PointControlViewModel.
+        // DotPositionEventBus so this VM is on the same bus as PointControlViewModel.
         DataContext = Ioc.Default.GetRequiredService<TriangleAlphaDataViewModel>();
         InitializeComponent();
     }

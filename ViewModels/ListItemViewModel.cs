@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Messaging;
-using SquareClickerPointer.Messages;
+using SquareClickerPointer.EventArgs;
+using SquareClickerPointer.EventBuses;
 using SquareClickerPointer.Models;
 
 namespace SquareClickerPointer.ViewModels;
@@ -36,7 +36,7 @@ namespace SquareClickerPointer.ViewModels;
 //    3. Inside the Popup, an ItemsControl renders ColorPaletteItems.
 //    4. Each ColorSwatchViewModel.PickCommand calls SelectColor(c) here.
 //    5. SelectColor() updates ColorBrush, sets IsColorPickerOpen = false
-//       (closing the Popup via binding), and publishes ColorChangedMessage.
+//       (closing the Popup via binding), and raises ItemColorEventBus.ColorChanged.
 //
 //  WHY "command per swatch" instead of a parametrised RelayCommand<Color>?
 //    Passing a Color struct as CommandParameter through XAML requires boxing and
@@ -52,8 +52,10 @@ public partial class ListItemViewModel : ViewModelBase
 {
     // ── Injected / forwarded dependencies ─────────────────────────────────────
 
-    private readonly IMessenger _messenger;
-    private readonly string     _containerId;
+    private readonly ItemColorEventBus _colorBus;
+    private readonly ItemLockEventBus  _lockBus;
+    private readonly ItemShapeEventBus _shapeBus;
+    private readonly string            _containerId;
 
     // ── Colour palette shared by all ListItemViewModels ───────────────────────
     //
@@ -176,7 +178,12 @@ public partial class ListItemViewModel : ViewModelBase
     /// <summary>
     /// Called by ExpandableContainerViewModel.SetItems() for each ListItemModel.
     /// </summary>
-    public ListItemViewModel(ListItemModel model, string containerId, IMessenger messenger)
+    public ListItemViewModel(
+        ListItemModel model,
+        string containerId,
+        ItemColorEventBus colorBus,
+        ItemLockEventBus  lockBus,
+        ItemShapeEventBus shapeBus)
     {
         Id           = model.Id;
         Name         = model.Name;
@@ -184,18 +191,18 @@ public partial class ListItemViewModel : ViewModelBase
         _colorBrush  = new SolidColorBrush(model.ItemColor);
         _isLocked    = model.IsLocked;
         _containerId = containerId;
-        _messenger   = messenger;
+        _colorBus    = colorBus;
+        _lockBus     = lockBus;
+        _shapeBus    = shapeBus;
 
         // Build colour palette items — one per entry in _paletteColors.
         // The lambda captures 'c' (a Color value-type copy) and 'this' (the VM).
         // When the swatch's PickCommand fires, it calls SelectColor(c) on THIS VM.
         //
-        // WHY is capturing 'this' acceptable here (unlike in messenger registration)?
+        // WHY is capturing 'this' acceptable here?
         //   ColorSwatchViewModel is OWNED by this ListItemViewModel — they have
         //   the same lifetime.  There is no risk of the palette items outliving
         //   this VM and holding it alive (they go out of scope together).
-        //   The WeakReference concern only applies when an EXTERNAL object (the
-        //   messenger) holds a reference that might prevent GC of this VM.
         ColorPaletteItems = _paletteColors
             .Select(c => new ColorSwatchViewModel(c, () => SelectColor(c)))
             .ToArray();
@@ -215,28 +222,28 @@ public partial class ListItemViewModel : ViewModelBase
     //   1. Updates the observable property (triggers XAML refresh automatically).
     //   2. Closes its picker by setting the open-flag to false (Popup/ToggleButton
     //      bindings update via TwoWay).
-    //   3. Publishes a message so any interested subscriber elsewhere in the app
-    //      can react without knowing about this ViewModel.
+    //   3. Raises an event on the appropriate event bus so any interested subscriber
+    //      elsewhere in the app can react without knowing about this ViewModel.
 
     private void SelectColor(Color color)
     {
         ColorBrush         = new SolidColorBrush(color);
         IsColorPickerOpen  = false;
-        _messenger.Send(new ColorChangedMessage(Id, _containerId, color));
+        _colorBus.Publish(this, new ColorChangedEventArgs(Id, _containerId, color));
     }
 
     private void SelectShape(ShapeType shape)
     {
         Shape              = shape;   // [NotifyPropertyChangedFor] refreshes IsStar etc.
         IsShapePickerOpen  = false;
-        _messenger.Send(new ShapeChangedMessage(Id, _containerId, shape));
+        _shapeBus.Publish(this, new ShapeChangedEventArgs(Id, _containerId, shape));
     }
 
     // ── Property-change hook — lock state ─────────────────────────────────────
 
     partial void OnIsLockedChanged(bool value)
     {
-        _messenger.Send(new ItemLockToggledMessage(Id, _containerId, value));
+        _lockBus.Publish(this, new ItemLockToggledEventArgs(Id, _containerId, value));
     }
 
     // ── Search / filter helpers (called by ItemListViewModel) ─────────────────

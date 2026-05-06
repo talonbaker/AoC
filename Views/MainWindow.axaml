@@ -36,9 +36,9 @@
      Adding a third panel means editing MainWindowViewModel.  Deleting one panel
      means editing it again.  The parent becomes a bottleneck.
 
-     Instead, the two controls communicate exclusively through IMessenger:
+     Instead, the two controls communicate exclusively through DotPositionEventBus:
 
-         PointControlViewModel  ──(DotReleasedMessage)──►  WeakReferenceMessenger
+         PointControlViewModel  ──(DotReleased event)──►  DotPositionEventBus
                                                                     │
                                                                     ▼
                                                     TriangleAlphaDataViewModel
@@ -57,10 +57,10 @@
 
     <StackPanel Spacing="10" Margin="10">
 
-        <!-- SquareClickerPointer — publisher of DotReleasedMessage -->
+        <!-- SquareClickerPointer — publisher of DotPositionEventBus.DotReleased -->
         <views:PointControlView/>
 
-        <!-- TriangleAlphaData — subscriber to DotReleasedMessage -->
+        <!-- TriangleAlphaData — subscriber to DotPositionEventBus.DotReleased -->
         <views:TriangleAlphaDataView/>
 
         <!--
@@ -76,13 +76,13 @@
              Container1View.ViewModel.SetItems(…) to populate it externally.
            • Each container resolves its own Transient ExpandableContainerViewModel
              from the DI container inside its code-behind constructor.
-           • They share the IMessenger singleton — that is how accordion
+           • They share the ContainerEventBus singleton — that is how accordion
              expand/collapse is coordinated without any direct references between them.
 
          NO MEDIATOR:
            MainWindow does not wire the containers together.  It only places them
            on screen and seeds their data.  The accordion behavior is handled
-           entirely via ContainerExpandedMessage on the shared IMessenger.
+           entirely via the ContainerExpanded event on the shared ContainerEventBus.
            Adding a fourth container is one line of XAML and one seeding call —
            zero changes to the existing containers.
         -->

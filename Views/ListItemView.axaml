@@ -44,7 +44,7 @@
             <!-- ── Column 0: Lock toggle ──────────────────────────────────────────
                  IsChecked="{Binding IsLocked, Mode=TwoWay}":
                    Button click → IsChecked flips → TwoWay binding writes IsLocked
-                   → OnIsLockedChanged hook fires → publishes ItemLockToggledMessage.
+                   → OnIsLockedChanged hook fires → raises ItemLockEventBus.ItemLockToggled.
             -->
             <ToggleButton Grid.Column="0"
                           IsChecked="{Binding IsLocked, Mode=TwoWay}"

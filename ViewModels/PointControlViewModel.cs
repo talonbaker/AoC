@@ -3,8 +3,8 @@ using System.Globalization;
 using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
-using SquareClickerPointer.Messages;
+using SquareClickerPointer.EventArgs;
+using SquareClickerPointer.EventBuses;
 using SquareClickerPointer.Models;
 
 namespace SquareClickerPointer.ViewModels;
@@ -42,31 +42,33 @@ namespace SquareClickerPointer.ViewModels;
 //  │    • [ObservableProperty] X, Y           → binds to crosshair & dot    │
 //  │    • CanvasDotX/Y, Line endpoints        → derived pixel positions     │
 //  │    • XText / YText                       → formatted display strings   │
-//  │    • DotReleasedMessage via IMessenger   → any subscriber, zero-cost   │
+//  │    • DotPositionEventBus.DotReleased      → any subscriber, zero-cost  │
 //  └─────────────────────────────────────────────────────────────────────────┘
 //
-//  WHY IMessenger INSTEAD OF THE OLD DotMoved EVENT
-//  ─────────────────────────────────────────────────
+//  WHY A DEDICATED EVENT BUS INSTEAD OF AN EVENT ON THIS VIEWMODEL
+//  ────────────────────────────────────────────────────────────────
 //  The previous version had:
 //      public event Action<double, double>? DotMoved;
 //
-//  That event required an outside caller (MainWindow, or another View) to:
-//    a) Have a reference to a PointControlView/ViewModel object.
+//  Putting the event directly on the ViewModel forces any outside caller to:
+//    a) Hold a typed reference to PointControlViewModel.
 //    b) Explicitly subscribe/unsubscribe.
 //    c) Know the method signature.
 //
-//  With IMessenger:
-//    • This class publishes one line: _messenger.Send(new DotReleasedMessage(X, Y))
+//  With a dedicated DotPositionEventBus:
+//    • This class invokes it in one line:
+//          _dotBus.Publish(this, new DotReleasedEventArgs(X, Y))
 //    • It does not know who (if anyone) is listening.
-//    • TriangleAlphaDataViewModel can subscribe without either class having
-//      a reference to the other.
+//    • TriangleAlphaDataViewModel subscribes via the same singleton bus instance
+//      without either class holding a reference to the other.
 //    • Adding a third subscriber (logging, analytics, another panel) costs zero
 //      changes here.
 
 /// <summary>
 /// ViewModel for the SquareClickerPointer (PointControlView) user control.
-/// Manages the 2-D dot position in the 0–10 domain and publishes a
-/// <see cref="DotReleasedMessage"/> when the user commits a canvas gesture.
+/// Manages the 2-D dot position in the 0–10 domain and raises the
+/// <see cref="DotPositionEventBus.DotReleased"/> event when the user commits a
+/// canvas gesture.
 /// </summary>
 public partial class PointControlViewModel : ViewModelBase
 {
@@ -101,42 +103,35 @@ public partial class PointControlViewModel : ViewModelBase
     //
     //   _suppressFire: raised to true when a caller sets BOTH X and Y in a row
     //   (e.g. SetFromCanvasPoint, GoToCenter) so that neither OnXChanged nor
-    //   OnYChanged publishes DotReleasedMessage independently; the caller publishes
-    //   exactly once via CommitPosition() at the end.
+    //   OnYChanged raises the DotReleased event independently; the caller raises
+    //   it exactly once via CommitPosition() at the end.
     //
     private bool _suppressLockSync;
     private bool _suppressFire;
 
-    // ── IMessenger — injected via the DI container ────────────────────────────────
+    // ── DotPositionEventBus — injected via the DI container ───────────────────────
     //
-    // WHY the field type is IMessenger (interface) not WeakReferenceMessenger (concrete):
+    // The bus is the publisher/observer plumbing for the DotReleased event.  This
+    // class only ever raises the event; subscribers (e.g. TriangleAlphaDataViewModel)
+    // attach in their own constructors.
     //
-    //   Coding against an interface is the Dependency Inversion Principle (the 'D' in
-    //   SOLID).  It means:
-    //     • Unit tests can pass a fake/no-op IMessenger that just records what was sent,
-    //       without spinning up the real global messenger.
-    //     • If we ever want to swap WeakReferenceMessenger for StrongReferenceMessenger
-    //       (or a custom implementation), we change ONE line in App.axaml.cs — not here.
-    //
-    private readonly IMessenger _messenger;
+    private readonly DotPositionEventBus _dotBus;
 
     // ── Constructor — receives all dependencies from the DI container ─────────────
     //
-    // WHY a constructor parameter instead of using WeakReferenceMessenger.Default directly:
+    // Constructor injection makes dependencies VISIBLE.  Anyone reading this class
+    // can immediately see "this class needs a DotPositionEventBus to function."
+    // The DI container (App.axaml.cs) is the single place that constructs the bus
+    // and provides the same singleton instance to every consumer.
     //
-    //   Constructor injection makes dependencies VISIBLE.  Anyone reading this class
-    //   can immediately see "this class needs an IMessenger to function."  There are no
-    //   hidden global references buried inside methods.  The DI container (App.axaml.cs)
-    //   is the single place that decides what IMessenger implementation to use and
-    //   provides it here.
+    // NEVER call `new PointControlViewModel()` yourself — the constructor requires
+    // a DotPositionEventBus argument.  Always resolve it via
+    // Ioc.Default.GetRequiredService<PointControlViewModel>() so the container
+    // wires up the dependency.
     //
-    //   NEVER call `new PointControlViewModel()` yourself — the constructor requires
-    //   an IMessenger argument.  Always let Ioc.Default.GetRequiredService<PointControlViewModel>()
-    //   create the instance so the container wires up the dependency.
-    //
-    public PointControlViewModel(IMessenger messenger)
+    public PointControlViewModel(DotPositionEventBus dotBus)
     {
-        _messenger = messenger;
+        _dotBus = dotBus;
     }
 
     // ── Core position properties ──────────────────────────────────────────────────
@@ -197,8 +192,9 @@ public partial class PointControlViewModel : ViewModelBase
                     CultureInfo.InvariantCulture, out double v)) return;
 
             // _suppressFire: we are about to set X which would trigger OnXChanged.
-            // We do NOT want OnXChanged to publish a message here — text-box edits
-            // are not "canvas releases" and should not drive TriangleAlphaData.
+            // We do NOT want OnXChanged to raise the DotReleased event here —
+            // text-box edits are not "canvas releases" and should not drive
+            // TriangleAlphaData.
             _suppressFire = true;
             X = Math.Clamp(v, 0, MaxValue);
             _suppressFire = false;
@@ -261,9 +257,9 @@ public partial class PointControlViewModel : ViewModelBase
             _suppressLockSync = true;
 
             // Save and restore _suppressFire so that only the initiating call site
-            // (SetFromCanvasPoint, a slider, etc.) decides whether to publish.
+            // (SetFromCanvasPoint, a slider, etc.) decides whether to raise the event.
             bool prevFire = _suppressFire;
-            _suppressFire = true;   // stop OnYChanged from also publishing
+            _suppressFire = true;   // stop OnYChanged from also raising the event
             Y = value;
             _suppressFire = prevFire;
 
@@ -297,17 +293,17 @@ public partial class PointControlViewModel : ViewModelBase
     /// through data binding.
     ///
     /// WHY this does NOT call CommitPosition():
-    ///   During a drag the position changes at ~60 fps.  Publishing a message on
-    ///   every frame would flood TriangleAlphaDataViewModel with recalculations that
-    ///   are immediately overwritten.  We only publish once the user lifts the mouse
-    ///   (see CommitPosition below).
+    ///   During a drag the position changes at ~60 fps.  Raising the DotReleased
+    ///   event on every frame would flood TriangleAlphaDataViewModel with
+    ///   recalculations that are immediately overwritten.  We only raise the event
+    ///   once the user lifts the mouse (see CommitPosition below).
     /// </summary>
     public void SetFromCanvasPoint(double pixelX, double pixelY)
     {
         // Suppress both flags so:
         //   (a) The lock sync does not kick in mid-update — we are setting X and Y
         //       together atomically and the lock-mirror logic is not needed.
-        //   (b) OnXChanged / OnYChanged do not independently try to publish.
+        //   (b) OnXChanged / OnYChanged do not independently try to raise the event.
         _suppressLockSync = true;
         _suppressFire = true;
         X = Math.Clamp(pixelX / CanvasSize * MaxValue, 0, MaxValue);
@@ -319,25 +315,25 @@ public partial class PointControlViewModel : ViewModelBase
 
     /// <summary>
     /// Called by <see cref="Views.PointControlView"/> when the pointer is released
-    /// from the canvas.  Publishes a <see cref="DotReleasedMessage"/> to the message
-    /// bus so that any subscriber can react to the final committed position.
+    /// from the canvas.  Raises the <see cref="DotPositionEventBus.DotReleased"/>
+    /// event so that any subscriber can react to the final committed position.
     ///
     /// WHY this is a method on the ViewModel (not fired directly from the View):
     ///
-    ///   The decision "a pointer-release on the canvas means: publish a message" is
-    ///   a DOMAIN rule, not a UI rule.  The View's job is to translate a raw pointer
-    ///   event into a meaningful action — it calls CommitPosition() and lets this
-    ///   class decide what that means.  If we put _messenger.Send() in the View's
-    ///   code-behind, the View would need to know about IMessenger and message types,
-    ///   which are business-layer concerns.
+    ///   The decision "a pointer-release on the canvas means: raise the DotReleased
+    ///   event" is a DOMAIN rule, not a UI rule.  The View's job is to translate a
+    ///   raw pointer event into a meaningful action — it calls CommitPosition() and
+    ///   lets this class decide what that means.  If we put _dotBus.Publish() in
+    ///   the View's code-behind, the View would need to know about the event bus
+    ///   and event-args types, which are business-layer concerns.
     ///
-    ///   This is the Publish side of the Publisher/Subscriber pattern:
-    ///   _messenger.Send() routes DotReleasedMessage to every registered recipient
-    ///   without this class knowing who they are or how many there are.
+    ///   This is the publisher side of the publisher/subscriber pattern:
+    ///   _dotBus.Publish() invokes every registered handler without this class
+    ///   knowing who they are or how many there are.
     /// </summary>
     public void CommitPosition()
     {
-        _messenger.Send(new DotReleasedMessage(X, Y));
+        _dotBus.Publish(this, new DotReleasedEventArgs(X, Y));
     }
 
     // ── Presets ───────────────────────────────────────────────────────────────────
